@@ -25,16 +25,21 @@
 cd $(dirname $0) ; CWD=$(pwd)
 
 PRGNAM=skypeforlinux
-VERSION=${VERSION:-8.109.0.209}
+VERSION=${VERSION:-8.127.0.200}
 BUILD=${BUILD:-1}
 TAG=${TAG:-_SBo}
 PKGTYPE=${PKGTYPE:-tgz}
 
+# skype snap package details can be accessed by
+# curl -sH 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/skype  | jq
+SNAPID=QRDEfjn4WJYnm0FzDKwqqRZZI77awQEV
+SNAPREVISION=${SNAPREVISION:-359}
+SNAPPKG=${SNAPID}_${SNAPREVISION}.snap
+
 if [ -z "$ARCH" ]; then
   case "$( uname -m )" in
-    i?86) ARCH=i586 ;;
-    arm*) ARCH=arm ;;
-       *) ARCH=$( uname -m ) ;;
+    x86_64) ARCH=x86_64 ;;
+         *) echo "Package for $(uname -m) architecture is not available." ; exit 1 ;;
   esac
 fi
 
@@ -50,39 +55,30 @@ TMP=${TMP:-/tmp/SBo}
 PKG=$TMP/package-$PRGNAM
 OUTPUT=${OUTPUT:-/tmp}
 
-if [ "$ARCH" != "x86_64" ]; then
-  echo "$ARCH is not supported."
-  exit 1
-fi
-
 set -e
 
 rm -rf $PKG
 mkdir -p $TMP $PKG $OUTPUT
-cd $PKG
-if [ -f $CWD/${PRGNAM}_${VERSION}_amd64.deb ]; then
-  ar p $CWD/${PRGNAM}_${VERSION}_amd64.deb data.tar.gz | tar -xvz
-elif [ -f $CWD/${PRGNAM}-64.deb ]; then
-  # Support the website download
-  ar p $CWD/${PRGNAM}-64.deb data.tar.gz | tar -xvz
-  VERSION=$(ar p $CWD/${PRGNAM}-64.deb control.tar.gz \
-            | tar -Ozxf - ./control | awk '/^Version:/{print $NF}')
-fi
+cd $TMP
+rm -rf $PRGNAM-$VERSION
+mkdir -p $PRGNAM-$VERSION
+cd $PRGNAM-$VERSION
+unsquashfs -q -f -d . $CWD/$SNAPPKG usr/share/skypeforlinux meta/gui/
+mkdir -p usr/bin usr/share/applications usr/share/pixmaps
+ln -s ../../usr/share/skypeforlinux/skypeforlinux usr/bin/skype
+sed 's,\${SNAP}/meta/gui,/usr/share/pixmaps,' meta/gui/skypeforlinux.desktop > usr/share/applications/skypeforlinux.desktop
+sed 's,\${SNAP}/meta/gui,/usr/share/pixmaps,' meta/gui/skypeforlinux-share.desktop > usr/share/applications/skypeforlinux-share.desktop
+cp meta/gui/skypeforlinux.png usr/share/pixmaps/
+
 chown -R root:root .
 find -L . \
- \( -perm 777 -o -perm 775 -o -perm 750 -o -perm 711 -o -perm 555 \
-  -o -perm 511 \) -exec chmod 755 {} \; -o \
- \( -perm 666 -o -perm 664 -o -perm 640 -o -perm 600 -o -perm 444 \
-  -o -perm 440 -o -perm 400 \) -exec chmod 644 {} \;
+  -perm /111 -a \! -perm 755 -a -exec chmod 755 {} + -o \
+  \! -perm /111 -a \! -perm 644 -a -exec chmod 644 {} +
 
-rm -rf $PKG/opt
+mv usr $PKG/
 
-mkdir -p $PKG/usr/doc/$PRGNAM-$VERSION
-mv $PKG/usr/share/$PRGNAM/LICENSE* $PKG/usr/doc/$PRGNAM-$VERSION
-mv $PKG/usr/share/doc/$PRGNAM/* $PKG/usr/doc/$PRGNAM-$VERSION
-rm -rf $PKG/usr/share/doc
-# Fixes: Help -> About Skype -> Third Party Notices
-ln -s $PRGNAM-$VERSION $PKG/usr/doc/$PRGNAM
+mkdir -p $PKG/usr/doc/$PRGNAM-$VERSION/
+cp -a $PKG/usr/share/skypeforlinux/LICENSES.chromium.html $PKG/usr/doc/$PRGNAM-$VERSION/
 cat $CWD/$PRGNAM.SlackBuild > $PKG/usr/doc/$PRGNAM-$VERSION/$PRGNAM.SlackBuild
 
 mkdir -p $PKG/install
